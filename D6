@@ -1,0 +1,117 @@
+Here is a very simple GAN example using TensorFlow/Keras that generates handwritten digits from the MNIST dataset. Just copy and run this code — it will train for a few epochs and show generated images.
+
+
+---
+
+Simple GAN Code (One File, Ready to Run)
+
+import tensorflow as tf
+from tensorflow.keras import layers
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load MNIST data
+(x_train, _), _ = tf.keras.datasets.mnist.load_data()
+x_train = (x_train.astype('float32') - 127.5) / 127.5  # Normalize to [-1, 1]
+x_train = np.expand_dims(x_train, axis=-1)
+
+# Set constants
+BUFFER_SIZE = 60000
+BATCH_SIZE = 128
+LATENT_DIM = 100
+EPOCHS = 3
+
+dataset = tf.data.Dataset.from_tensor_slices(x_train).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+# Build Generator
+def make_generator():
+    model = tf.keras.Sequential([
+        layers.Dense(7*7*256, use_bias=False, input_shape=(LATENT_DIM,)),
+        layers.LeakyReLU(),
+        layers.Reshape((7, 7, 256)),
+        layers.Conv2DTranspose(128, 5, strides=1, padding='same', use_bias=False),
+        layers.LeakyReLU(),
+        layers.Conv2DTranspose(64, 5, strides=2, padding='same', use_bias=False),
+        layers.LeakyReLU(),
+        layers.Conv2DTranspose(1, 5, strides=2, padding='same', use_bias=False, activation='tanh')
+    ])
+    return model
+
+# Build Discriminator
+def make_discriminator():
+    model = tf.keras.Sequential([
+        layers.Conv2D(64, 5, strides=2, padding='same', input_shape=[28, 28, 1]),
+        layers.LeakyReLU(),
+        layers.Dropout(0.3),
+        layers.Conv2D(128, 5, strides=2, padding='same'),
+        layers.LeakyReLU(),
+        layers.Dropout(0.3),
+        layers.Flatten(),
+        layers.Dense(1)
+    ])
+    return model
+
+# Instantiate models
+generator = make_generator()
+discriminator = make_discriminator()
+
+# Define loss and optimizers
+loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+gen_opt = tf.keras.optimizers.Adam(1e-4)
+disc_opt = tf.keras.optimizers.Adam(1e-4)
+
+@tf.function
+def train_step(images):
+    noise = tf.random.normal([BATCH_SIZE, LATENT_DIM])
+    with tf.GradientTape() as g, tf.GradientTape() as d:
+        fake_images = generator(noise, training=True)
+        real_output = discriminator(images, training=True)
+        fake_output = discriminator(fake_images, training=True)
+
+        gen_loss = loss(tf.ones_like(fake_output), fake_output)
+        disc_loss = loss(tf.ones_like(real_output), real_output) + loss(tf.zeros_like(fake_output), fake_output)
+
+    gradients_of_gen = g.gradient(gen_loss, generator.trainable_variables)
+    gradients_of_disc = d.gradient(disc_loss, discriminator.trainable_variables)
+    gen_opt.apply_gradients(zip(gradients_of_gen, generator.trainable_variables))
+    disc_opt.apply_gradients(zip(gradients_of_disc, discriminator.trainable_variables))
+
+# Train loop
+def train(dataset, epochs):
+    for epoch in range(epochs):
+        for batch in dataset:
+            train_step(batch)
+        print(f"Epoch {epoch+1} done")
+        show_generated_images(generator)
+
+# Show generated images
+def show_generated_images(model, n=16):
+    noise = tf.random.normal([n, LATENT_DIM])
+    predictions = model(noise, training=False)
+    predictions = (predictions + 1) / 2.0  # Rescale to [0,1]
+    fig = plt.figure(figsize=(4, 4))
+    for i in range(n):
+        plt.subplot(4, 4, i+1)
+        plt.imshow(predictions[i, :, :, 0], cmap='gray')
+        plt.axis('off')
+    plt.show()
+
+# Run training
+train(dataset, EPOCHS)
+
+
+---
+
+What You Need
+
+Python
+
+TensorFlow (pip install tensorflow)
+
+An image viewer (like matplotlib) for output
+
+
+This script will start generating digit images after just a few minutes of training.
+
+Want an even smaller version (less than 100 lines)?
+
